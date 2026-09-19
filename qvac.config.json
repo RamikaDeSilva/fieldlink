@@ -1,0 +1,7 @@
+{
+  "loggerLevel": "info",
+  "loggerConsoleOutput": true,
+  "cacheDirectory": ".qvac",
+  "httpDownloadConcurrency": 3,
+  "httpConnectionTimeoutMs": 10000
+}

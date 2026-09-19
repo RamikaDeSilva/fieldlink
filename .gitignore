@@ -1,0 +1,47 @@
+# OS
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+
+# Build / test
+dist/
+build/
+coverage/
+*.tsbuildinfo
+.vite/
+.turbo/
+.cache/
+
+# Env and secrets
+.env
+.env.*
+!.env.example
+
+# QVAC local model cache — never commit weights
+.qvac/
+*.gguf
+
+# Editors / IDE
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# Misc
+tmp/
+temp/
+.eslintcache
