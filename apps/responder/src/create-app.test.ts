@@ -50,7 +50,6 @@ describe('responder API', () => {
     const received: string[] = [];
     const { app } = createResponderApp({
       engine,
-      maxAttempts: 2,
       send: async (envelope) => {
         if (!up) throw new Error('ECONNREFUSED');
         received.push(envelope.report_id);
