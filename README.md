@@ -95,6 +95,8 @@ CIVILIAN_ENGINE=ollama npm run dev:civilian
 
 Open `http://127.0.0.1:3002` in Chrome or Safari and allow microphone access when prompted. Do not open the app through a non-local HTTP hostname: browsers generally require HTTPS for microphone access, while `localhost` is treated as secure. The `.cache/` directory is gitignored, so every demo laptop must run `npm run voice:prefetch` once before going offline.
 
+The repository's `.npmrc` skips ONNX Runtime's optional GPU artifact download. CPU inference remains bundled and is the runtime used by Whisper Tiny; this keeps `npm ci` reproducible on GitHub Actions, Apple Silicon, Intel Macs, and Windows.
+
 Open http://127.0.0.1:3002. Once the status says **Local AI ready**, disconnect Wi-Fi and use the app normally. The browser talks only to the local FieldLink server, which talks to Ollama at `127.0.0.1:11434`.
 
 For a rehearsal without Ollama, use the visible scripted kill switch:
