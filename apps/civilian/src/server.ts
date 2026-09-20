@@ -6,6 +6,9 @@ export async function startCivilian(port = Number(process.env.CIVILIAN_PORT ?? 3
   void created.engine.warmup().catch((error) => {
     console.error('Civilian local AI warmup failed:', error instanceof Error ? error.message : error);
   });
+  void created.voiceTranscriber.warmup?.().catch((error) => {
+    console.warn('Whisper warmup failed; local voice fallback remains available:', error instanceof Error ? error.message : error);
+  });
   const server = serve({ fetch: created.app.fetch, port, hostname: '0.0.0.0' });
   return { ...created, server, port };
 }

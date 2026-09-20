@@ -35,6 +35,56 @@ type ConversationMessage = {
   text: string;
 };
 
+type VoiceHealth = {
+  status: 'loading' | 'ready' | 'error';
+  engine: string;
+  local: true;
+  fallback?: boolean;
+  primaryStatus?: 'loading' | 'ready' | 'error';
+  error?: string;
+};
+
+type RecordingSession = {
+  stream: MediaStream;
+  context: AudioContext;
+  source: MediaStreamAudioSourceNode;
+  processor: ScriptProcessorNode;
+  silentOutput: GainNode;
+  chunks: Float32Array[];
+  sampleRate: number;
+};
+
+function encodePcmWave(chunks: Float32Array[], sampleRate: number): Blob {
+  const sampleCount = chunks.reduce((total, chunk) => total + chunk.length, 0);
+  const buffer = new ArrayBuffer(44 + sampleCount * 2);
+  const view = new DataView(buffer);
+  const writeText = (offset: number, text: string) => {
+    for (let index = 0; index < text.length; index += 1) view.setUint8(offset + index, text.charCodeAt(index));
+  };
+  writeText(0, 'RIFF');
+  view.setUint32(4, 36 + sampleCount * 2, true);
+  writeText(8, 'WAVE');
+  writeText(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeText(36, 'data');
+  view.setUint32(40, sampleCount * 2, true);
+  let offset = 44;
+  for (const chunk of chunks) {
+    for (const sample of chunk) {
+      const clamped = Math.max(-1, Math.min(1, sample));
+      view.setInt16(offset, clamped < 0 ? clamped * 32768 : clamped * 32767, true);
+      offset += 2;
+    }
+  }
+  return new Blob([buffer], { type: 'audio/wav' });
+}
+
 function PlanCard({ item, index }: { item: PlanItem; index: number }) {
   return (
     <article className={`guide-card priority-${item.priority}`}>
@@ -67,7 +117,12 @@ export function App() {
   const [conversationContext, setConversationContext] = useState('');
   const [followUpText, setFollowUpText] = useState('');
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
+  const [voiceHealth, setVoiceHealth] = useState<VoiceHealth | null>(null);
+  const [voiceState, setVoiceState] = useState<'idle' | 'recording' | 'transcribing'>('idle');
+  const [voiceMessage, setVoiceMessage] = useState('');
   const conversationEndRef = useRef<HTMLDivElement>(null);
+  const recordingRef = useRef<RecordingSession | null>(null);
+  const recordingTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -91,6 +146,38 @@ export function App() {
       cancelled = true;
       if (timer !== undefined) window.clearTimeout(timer);
     };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    let timer: number | undefined;
+    const pollVoice = async () => {
+      try {
+        const response = await fetch('/api/voice/health');
+        const next = await response.json() as VoiceHealth;
+        if (cancelled) return;
+        setVoiceHealth(next);
+        if (next.primaryStatus === 'loading' || next.status === 'loading') {
+          timer = window.setTimeout(() => void pollVoice(), 1_000);
+        }
+      } catch {
+        if (!cancelled) setVoiceHealth({ status: 'error', engine: 'unavailable', local: true, error: 'Voice service is unavailable.' });
+      }
+    };
+    void pollVoice();
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, []);
+
+  useEffect(() => () => {
+    if (recordingTimerRef.current !== null) window.clearTimeout(recordingTimerRef.current);
+    const recording = recordingRef.current;
+    recording?.stream.getTracks().forEach((track) => track.stop());
+    recording?.processor.disconnect();
+    recording?.source.disconnect();
+    void recording?.context.close();
   }, []);
 
   const grouped = useMemo(() => {
@@ -183,6 +270,85 @@ export function App() {
   function updateComposer(value: string) {
     if (result) setFollowUpText(value);
     else setSituation(value);
+  }
+
+  function appendTranscript(text: string) {
+    const append = (current: string) => [current.trim(), text.trim()].filter(Boolean).join(' ');
+    if (result) setFollowUpText(append);
+    else setSituation(append);
+  }
+
+  async function startRecording() {
+    setVoiceMessage('');
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setVoiceMessage('This browser does not provide microphone access. You can still type.');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
+      });
+      const context = new AudioContext();
+      await context.resume();
+      const source = context.createMediaStreamSource(stream);
+      const processor = context.createScriptProcessor(4096, 1, 1);
+      const silentOutput = context.createGain();
+      silentOutput.gain.value = 0;
+      const chunks: Float32Array[] = [];
+      processor.onaudioprocess = (event) => {
+        chunks.push(new Float32Array(event.inputBuffer.getChannelData(0)));
+      };
+      source.connect(processor);
+      processor.connect(silentOutput);
+      silentOutput.connect(context.destination);
+      recordingRef.current = { stream, context, source, processor, silentOutput, chunks, sampleRate: context.sampleRate };
+      setVoiceState('recording');
+      setVoiceMessage('Listening locally… Speak for up to 20 seconds.');
+      recordingTimerRef.current = window.setTimeout(() => void stopRecording(), 20_000);
+    } catch (caught) {
+      setVoiceState('idle');
+      setVoiceMessage(caught instanceof Error ? `Microphone unavailable: ${caught.message}` : 'Microphone permission was not granted.');
+    }
+  }
+
+  async function stopRecording() {
+    const recording = recordingRef.current;
+    if (!recording) return;
+    recordingRef.current = null;
+    if (recordingTimerRef.current !== null) {
+      window.clearTimeout(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+    recording.processor.onaudioprocess = null;
+    recording.processor.disconnect();
+    recording.source.disconnect();
+    recording.silentOutput.disconnect();
+    recording.stream.getTracks().forEach((track) => track.stop());
+    await recording.context.close();
+
+    if (recording.chunks.length === 0) {
+      setVoiceState('idle');
+      setVoiceMessage('No audio was captured. Try again or type your situation.');
+      return;
+    }
+
+    setVoiceState('transcribing');
+    setVoiceMessage(`Transcribing locally with ${voiceHealth?.engine ?? 'Whisper Tiny'}…`);
+    try {
+      const response = await fetch('/api/transcribe', {
+        method: 'POST',
+        headers: { 'content-type': 'audio/wav' },
+        body: encodePcmWave(recording.chunks, recording.sampleRate),
+      });
+      const body = await response.json() as { text?: string; error?: string; message?: string; engine?: string };
+      if (!response.ok || !body.text) throw new Error(body.message ?? body.error ?? 'No speech was recognized.');
+      appendTranscript(body.text);
+      setVoiceMessage(`Transcript added using ${body.engine ?? 'local speech recognition'}. Review it, then send.`);
+    } catch (caught) {
+      setVoiceMessage(caught instanceof Error ? `Could not transcribe: ${caught.message}` : 'Could not transcribe this recording.');
+    } finally {
+      setVoiceState('idle');
+    }
   }
 
   function sendCurrentMessage() {
@@ -289,6 +455,16 @@ export function App() {
             {error ? <p className="form-error" role="alert">{error}</p> : null}
 
             <div className="chat-composer">
+              <button
+                className={`voice-button ${voiceState}`}
+                type="button"
+                disabled={voiceState === 'transcribing' || voiceHealth?.status === 'error'}
+                aria-label={voiceState === 'recording' ? 'Stop voice recording' : 'Record voice input'}
+                onClick={() => voiceState === 'recording' ? void stopRecording() : void startRecording()}
+              >
+                <i aria-hidden="true">{voiceState === 'recording' ? '■' : 'MIC'}</i>
+                <span>{voiceState === 'recording' ? 'Stop' : voiceState === 'transcribing' ? 'Working…' : 'Speak'}</span>
+              </button>
               <label className="sr-only" htmlFor="situation">{result ? 'Add details to the situation' : 'Describe what is happening'}</label>
               <textarea
                 id="situation"
@@ -304,6 +480,7 @@ export function App() {
                 maxLength={result ? 800 : 2000}
               />
               <button
+                className="send-button"
                 type="button"
                 disabled={!ready || busy || !composerValue.trim()}
                 onClick={sendCurrentMessage}
@@ -312,7 +489,10 @@ export function App() {
                 <b aria-hidden="true">→</b>
               </button>
             </div>
-            <p className="composer-note">Enter to send · Shift+Enter for a new line · Educational guidance only</p>
+            <div className="composer-meta">
+              <p className={`voice-message ${voiceState}`}>{voiceMessage || `${voiceHealth?.engine ?? 'Voice model'} · Audio stays on this laptop`}</p>
+              <p className="composer-note">Enter to send · Shift+Enter for a new line · Educational guidance only</p>
+            </div>
           </div>
         </div>
       </section>

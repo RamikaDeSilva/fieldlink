@@ -3,6 +3,7 @@ import { cors } from 'hono/cors';
 import { loadCivilianEngine, type CivilianEngine } from './engine.ts';
 import { assemblePlan, deterministicChecks } from './planner.ts';
 import { civilianLog, errorLogFields, promptLogFields } from './logger.ts';
+import { loadVoiceTranscriber, type VoiceTranscriber } from './transcription.ts';
 import type { Household, PlanRequest, PlanResponse } from './types.ts';
 
 const emptyHousehold: Household = {
@@ -24,8 +25,9 @@ function parseHousehold(value: unknown): Household {
   };
 }
 
-export function createCivilianApp(deps: { engine?: CivilianEngine } = {}) {
+export function createCivilianApp(deps: { engine?: CivilianEngine; voiceTranscriber?: VoiceTranscriber } = {}) {
   const engine = deps.engine ?? loadCivilianEngine();
+  const voiceTranscriber = deps.voiceTranscriber ?? loadVoiceTranscriber();
   const app = new Hono();
   let recovery: Promise<void> | null = null;
   app.use('*', cors());
@@ -41,6 +43,38 @@ export function createCivilianApp(deps: { engine?: CivilianEngine } = {}) {
       });
     }
     return c.json(health);
+  });
+
+  app.get('/api/voice/health', (c) => c.json(voiceTranscriber.health()));
+
+  app.post('/api/transcribe', async (c) => {
+    const requestId = crypto.randomUUID().slice(0, 8);
+    const health = voiceTranscriber.health();
+    if (health.status !== 'ready') return c.json({ error: health.error ?? 'voice_unavailable', health }, 503);
+
+    const declaredLength = Number(c.req.header('content-length') ?? 0);
+    if (declaredLength > 5_000_000) return c.json({ error: 'audio_too_large' }, 413);
+
+    const bytes = new Uint8Array(await c.req.arrayBuffer());
+    if (bytes.byteLength < 44 || bytes.byteLength > 5_000_000) {
+      return c.json({ error: 'audio_must_be_a_wav_under_5mb' }, 400);
+    }
+
+    civilianLog('voice.transcription.started', { requestId, bytes: bytes.byteLength, engine: health.engine });
+    const started = performance.now();
+    try {
+      const text = await voiceTranscriber.transcribe(bytes);
+      civilianLog('voice.transcription.completed', {
+        requestId,
+        textChars: text.length,
+        latencyMs: Math.round(performance.now() - started),
+      });
+      if (!text) return c.json({ error: 'no_speech_detected' }, 422);
+      return c.json({ text, engine: health.engine, local: true, cloudCalls: 0, requestId });
+    } catch (error) {
+      civilianLog('voice.transcription.failed', { requestId, ...errorLogFields(error) }, 'error');
+      return c.json({ error: 'transcription_failed', message: error instanceof Error ? error.message : String(error) }, 500);
+    }
   });
 
   app.post('/api/plan', async (c) => {
@@ -148,5 +182,5 @@ export function createCivilianApp(deps: { engine?: CivilianEngine } = {}) {
     return c.json(response);
   });
 
-  return { app, engine };
+  return { app, engine, voiceTranscriber };
 }

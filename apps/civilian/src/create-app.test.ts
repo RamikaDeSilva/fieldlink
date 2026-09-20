@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createCivilianApp } from './create-app.ts';
 import { ScriptedCivilianEngine, type CivilianEngine } from './engine.ts';
 import type { EngineHealth, ModelAnalysis, PlanRequest } from './types.ts';
+import type { VoiceTranscriber } from './transcription.ts';
 
 async function readyScripted() {
   const engine = new ScriptedCivilianEngine();
@@ -126,5 +127,28 @@ describe('civilian API', () => {
     const response = await post(app, situation);
     const body = await response.json();
     expect(body.plan.some((item: { guideId: string }) => item.guideId === expectedGuide)).toBe(true);
+  });
+
+  it('returns local voice transcripts without cloud calls', async () => {
+    const voiceTranscriber: VoiceTranscriber = {
+      health: () => ({ status: 'ready', engine: 'whisper-tiny.en', local: true }),
+      async transcribe() {
+        return 'The street is filling with water.';
+      },
+    };
+    const engine = await readyScripted();
+    const { app } = createCivilianApp({ engine, voiceTranscriber });
+    const response = await app.request('/api/transcribe', {
+      method: 'POST',
+      headers: { 'content-type': 'audio/wav' },
+      body: new Uint8Array(44),
+    });
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      text: 'The street is filling with water.',
+      engine: 'whisper-tiny.en',
+      local: true,
+      cloudCalls: 0,
+    });
   });
 });

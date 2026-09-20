@@ -3,8 +3,9 @@ import react from '@vitejs/plugin-react';
 import { createCivilianApp } from './src/create-app.ts';
 import { honoApiPlugin } from '../vite-hono.ts';
 
-const { app, engine } = createCivilianApp();
+const { app, engine, voiceTranscriber } = createCivilianApp();
 void engine.warmup().catch(() => undefined);
+void voiceTranscriber.warmup?.().catch(() => undefined);
 
 export default defineConfig({
   plugins: [react(), honoApiPlugin('civilian-api', () => app)],
