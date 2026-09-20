@@ -49,6 +49,7 @@ export const GUIDE_IDS = [
 export type GuideId = (typeof GUIDE_IDS)[number];
 export type Priority = 'immediate' | 'next' | 'prepare';
 export type FollowUpKey = 'describe_hazard' | 'location_safety' | 'injuries' | 'official_order';
+export type ConversationIntent = 'needs_guidance' | 'all_clear' | 'unclear';
 
 export type Household = {
   children: boolean;
@@ -70,6 +71,7 @@ export type ModelAnalysis = {
   guideIds: GuideId[];
   confidence: number;
   followUpKey: FollowUpKey | null;
+  intent: ConversationIntent;
 };
 
 export type EngineHealth = {

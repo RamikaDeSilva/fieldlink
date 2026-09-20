@@ -10,6 +10,7 @@ const validAnalysis = {
   guideIds: ['power-outage', 'unsafe-water'],
   confidence: 0.91,
   followUpKey: null,
+  intent: 'needs_guidance',
 };
 
 describe('civilian Ollama engine', () => {
@@ -44,6 +45,7 @@ describe('civilian Ollama engine', () => {
     expect(sent.model).toBe('meta-test');
     expect(sent.stream).toBe(false);
     expect(sent.format).toMatchObject({ type: 'object' });
+    expect(sent.format).toMatchObject({ required: expect.arrayContaining(['intent']) });
     expect(sent.options).toEqual({ temperature: 0, num_ctx: 2048, num_predict: 128 });
     expect(sent.keep_alive).toBe('30m');
   });

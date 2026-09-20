@@ -115,13 +115,14 @@ export function createCivilianApp(deps: { engine?: CivilianEngine; voiceTranscri
       immediateDanger: deterministic.immediateDanger,
       medicalAdviceRequest: deterministic.medicalAdviceRequest,
       tooVague: deterministic.tooVague,
+      allClear: deterministic.allClear,
     });
     let analysis;
     let notice: string | undefined;
-    if (deterministic.tooVague || deterministic.medicalAdviceRequest) {
+    if (deterministic.medicalAdviceRequest || deterministic.allClear) {
       civilianLog('plan.model.skipped', {
         requestId,
-        reason: deterministic.tooVague ? 'vague_input' : 'medical_boundary',
+        reason: deterministic.medicalAdviceRequest ? 'medical_boundary' : 'deterministic_all_clear',
       });
       analysis = {
         hazards: deterministic.hazards,
@@ -130,6 +131,7 @@ export function createCivilianApp(deps: { engine?: CivilianEngine; voiceTranscri
         guideIds: deterministic.forcedGuideIds,
         confidence: 1,
         followUpKey: 'describe_hazard' as const,
+        intent: deterministic.allClear ? 'all_clear' as const : 'needs_guidance' as const,
       };
     } else {
       try {
@@ -146,6 +148,7 @@ export function createCivilianApp(deps: { engine?: CivilianEngine; voiceTranscri
           guideIds: [],
           confidence: 0,
           followUpKey: 'describe_hazard' as const,
+          intent: 'unclear' as const,
         };
         notice = 'Local AI could not complete this request. Only deterministic safety matches are shown.';
       }
