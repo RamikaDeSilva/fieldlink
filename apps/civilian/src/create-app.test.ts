@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createCivilianApp } from './create-app.ts';
 import { ScriptedCivilianEngine, type CivilianEngine } from './engine.ts';
 import type { EngineHealth, ModelAnalysis, PlanRequest } from './types.ts';
+import type { VoiceTranscriber } from './transcription.ts';
 
 async function readyScripted() {
   const engine = new ScriptedCivilianEngine();
@@ -64,6 +65,53 @@ describe('civilian API', () => {
     expect(body.followUpQuestion).toContain('anyone injured');
   });
 
+  it.each([
+    'No one is injured for now. I think we are okay.',
+    'No one is injured. Everything good.',
+    'We are safe and everything is fine.',
+    'I’m okay, I’m okay, I’m good.',
+    'The situation has settled and we no longer have any concerns.',
+    'Everything is under control here.',
+    'We do not need any more assistance.',
+  ])('acknowledges an all-clear update instead of repeating the hazard question', async (confirmation) => {
+    const engine = await readyScripted();
+    const { app } = createCivilianApp({ engine });
+    const response = await post(app, `Can you hear me?\nAdditional detail: ${confirmation}`);
+    const body = await response.json();
+    expect(body.plan).toEqual([]);
+    expect(body.analysis.immediateDanger).toBe(false);
+    expect(body.followUpQuestion).toBe('I’m glad everyone is safe. Is there anything else you need assistance with?');
+  });
+
+  it('does not let an all-clear phrase suppress a detected emergency', async () => {
+    const engine = await readyScripted();
+    const { app } = createCivilianApp({ engine });
+    const response = await post(app, 'Blood is spurting from their leg. Additional detail: I think we are okay.');
+    const body = await response.json();
+    expect(body.analysis.immediateDanger).toBe(true);
+    expect(body.plan.some((item: { guideId: string }) => item.guideId === 'severe-bleeding')).toBe(true);
+  });
+
+  it('uses model intent to understand an unfamiliar all-clear expression', async () => {
+    const semanticEngine: CivilianEngine = {
+      async warmup() {},
+      health(): EngineHealth {
+        return { status: 'ready', engine: 'ollama', model: 'test', local: true, warmupMs: 0 };
+      },
+      async analyze(): Promise<ModelAnalysis> {
+        return {
+          hazards: [], needs: [], immediateDanger: false, guideIds: [], confidence: 0.86,
+          followUpKey: null, intent: 'all_clear',
+        };
+      },
+    };
+    const { app } = createCivilianApp({ engine: semanticEngine });
+    const response = await post(app, 'The situation has settled and we no longer have any concerns.');
+    const body = await response.json();
+    expect(body.plan).toEqual([]);
+    expect(body.followUpQuestion).toContain('anything else you need assistance with');
+  });
+
   it('declines prescription requests without returning model-selected instructions', async () => {
     const engine = await readyScripted();
     const { app } = createCivilianApp({ engine });
@@ -81,7 +129,7 @@ describe('civilian API', () => {
       async analyze(_request: PlanRequest): Promise<ModelAnalysis> {
         return {
           hazards: ['unsafe_water'], needs: [], immediateDanger: false,
-          guideIds: ['unsafe-water'], confidence: 0.8, followUpKey: null,
+          guideIds: ['unsafe-water'], confidence: 0.8, followUpKey: null, intent: 'needs_guidance',
         };
       },
     };
@@ -101,7 +149,7 @@ describe('civilian API', () => {
       async analyze(): Promise<ModelAnalysis> {
         return {
           hazards: ['cardiac_arrest', 'severe_bleeding'], needs: [], immediateDanger: true,
-          guideIds: ['adult-cpr', 'severe-bleeding', 'unsafe-water'], confidence: 0.5, followUpKey: null,
+          guideIds: ['adult-cpr', 'severe-bleeding', 'unsafe-water'], confidence: 0.5, followUpKey: null, intent: 'needs_guidance',
         };
       },
     };
@@ -126,5 +174,28 @@ describe('civilian API', () => {
     const response = await post(app, situation);
     const body = await response.json();
     expect(body.plan.some((item: { guideId: string }) => item.guideId === expectedGuide)).toBe(true);
+  });
+
+  it('returns local voice transcripts without cloud calls', async () => {
+    const voiceTranscriber: VoiceTranscriber = {
+      health: () => ({ status: 'ready', engine: 'whisper-tiny.en', local: true }),
+      async transcribe() {
+        return 'The street is filling with water.';
+      },
+    };
+    const engine = await readyScripted();
+    const { app } = createCivilianApp({ engine, voiceTranscriber });
+    const response = await app.request('/api/transcribe', {
+      method: 'POST',
+      headers: { 'content-type': 'audio/wav' },
+      body: new Uint8Array(44),
+    });
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      text: 'The street is filling with water.',
+      engine: 'whisper-tiny.en',
+      local: true,
+      cloudCalls: 0,
+    });
   });
 });

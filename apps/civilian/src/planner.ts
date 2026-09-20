@@ -23,6 +23,7 @@ export type DeterministicResult = {
   immediateDanger: boolean;
   medicalAdviceRequest: boolean;
   tooVague: boolean;
+  allClear: boolean;
 };
 
 function matches(text: string, expression: RegExp): boolean {
@@ -31,6 +32,7 @@ function matches(text: string, expression: RegExp): boolean {
 
 export function deterministicChecks(request: PlanRequest): DeterministicResult {
   const text = request.situation.trim();
+  const latestDetail = text.split(/additional detail:/i).at(-1)?.trim() ?? text;
   const forcedGuideIds: GuideId[] = [];
   const hazards: Hazard[] = [];
   const candidateGuideIds: GuideId[] = [];
@@ -61,6 +63,7 @@ export function deterministicChecks(request: PlanRequest): DeterministicResult {
       immediateDanger: false,
       medicalAdviceRequest: true,
       tooVague: false,
+      allClear: false,
     };
   }
 
@@ -106,6 +109,8 @@ export function deterministicChecks(request: PlanRequest): DeterministicResult {
     ...candidateGuideIds,
     ...householdGuides(request.household),
   ])];
+  const allClear = matches(latestDetail, /everything (?:is )?(?:good|okay|ok|fine|under control)|(?:i(?:['’]m| am)|we(?:['’]re| are)) (?:good|okay|ok|fine|safe)|i think (?:i(?:['’]m| am)|we(?:['’]re| are)) (?:okay|ok|fine|safe)|no one is injured|nobody is injured|everyone is (?:okay|ok|fine|safe)|all (?:good|clear|safe)|(?:situation|things?) (?:has|have) (?:settled|calmed down|resolved)|(?:it(?:['’]s| is)|things? (?:are|is)) under control|no longer (?:have|has|any) concerns?|nothing (?:else )?(?:is )?wrong|do not need (?:any )?(?:more )?(?:help|assistance)/)
+    && hazards.length === 0;
 
   return {
     forcedGuideIds,
@@ -114,6 +119,7 @@ export function deterministicChecks(request: PlanRequest): DeterministicResult {
     immediateDanger,
     medicalAdviceRequest: false,
     tooVague: knownCandidates.length === 0 && householdGuides(request.household).length === 0,
+    allClear,
   };
 }
 
@@ -152,6 +158,14 @@ export function assemblePlan(
   model: ModelAnalysis,
   deterministic: DeterministicResult,
 ): { plan: PlanItem[]; hazards: Hazard[]; immediateDanger: boolean; followUpQuestion: string | null } {
+  if (deterministic.allClear || (model.intent === 'all_clear' && deterministic.hazards.length === 0)) {
+    return {
+      plan: [],
+      hazards: [],
+      immediateDanger: false,
+      followUpQuestion: 'I’m glad everyone is safe. Is there anything else you need assistance with?',
+    };
+  }
   const guideIds = deterministic.medicalAdviceRequest
     ? deterministic.forcedGuideIds
     : deterministic.tooVague
