@@ -49,6 +49,11 @@ export function TelemetryPanel({ health }: { health: HealthStatus | null }) {
         <div>
           <span>egress</span> <b>{ready ? '0 cloud calls' : 'warming'}</b>
         </div>
+        {health?.error ? (
+          <div>
+            <span>error</span> <b>{health.error}</b>
+          </div>
+        ) : null}
       </div>
     </aside>
   );
