@@ -3,7 +3,18 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
+  optimizeDeps: {
+    exclude: ['@qvac/sdk'],
+  },
+  ssr: {
+    external: ['@qvac/sdk'],
+  },
   test: {
+    server: {
+      deps: {
+        external: ['/@qvac\\/sdk/'],
+      },
+    },
     projects: [
       {
         test: {
@@ -57,6 +68,7 @@ export default defineConfig({
         test: {
           name: 'evals',
           include: ['packages/evals/**/*.test.ts'],
+          exclude: ['packages/evals/**/*.qvac.test.ts'],
           environment: 'node',
         },
       },
