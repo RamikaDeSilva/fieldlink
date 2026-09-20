@@ -42,6 +42,7 @@ export default defineConfig({
         test: {
           name: 'ui',
           include: ['apps/**/*.test.tsx'],
+          exclude: ['apps/civilian/**'],
           environment: 'jsdom',
           setupFiles: ['./apps/test-setup.ts'],
         },
@@ -50,7 +51,17 @@ export default defineConfig({
         test: {
           name: 'apps',
           include: ['apps/**/*.test.ts'],
+          exclude: ['apps/civilian/**'],
           environment: 'node',
+        },
+      },
+      {
+        plugins: [react()],
+        test: {
+          name: 'civilian',
+          include: ['apps/civilian/**/*.test.{ts,tsx}'],
+          environment: 'jsdom',
+          setupFiles: ['./apps/test-setup.ts'],
         },
       },
       {

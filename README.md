@@ -1,6 +1,6 @@
 # FieldLink
 
-Offline-first triage relay for first responders and HQ. A local model **classifies** a sitrep. A hardcoded protocol table **prescribes** the next steps. HQ receives a small JSON envelope instead of a voice channel.
+Offline-first guidance for responders, HQ, and civilians. Local models classify situations while vetted, stored guidance supplies the actions. The responder product relays compact sitreps to HQ; the separate civilian product builds a private action plan when internet service is unavailable.
 
 ## Why this shape
 
@@ -20,6 +20,7 @@ Demo protocols: drowning/CPR, massive hemorrhage, and an explicit out-of-scope r
 | `packages/evals` | Dev C | Phrase corpus |
 | `apps/responder` | Dev A | Field unit UI + API |
 | `apps/hq` | Dev A | Command dashboard + ingest |
+| `apps/civilian` | standalone | Offline civilian disaster planner + Ollama adapter |
 
 ## Commands
 
@@ -29,6 +30,7 @@ ENGINE=scripted npm test
 ENGINE=scripted npm run gate
 ENGINE=scripted npm run dev:responder
 npm run dev:hq
+npm run dev:civilian   # Meta Llama through local Ollama
 npm run models:prefetch   # optional, while online
 ```
 
@@ -46,6 +48,48 @@ ENGINE=qvac npm run dev:responder
 EVAL_ENGINE=qvac npm run test:qvac
 ```
 
+## Civilian local Meta AI
+
+Install [Ollama](https://ollama.com/download), then download the model while online:
+
+```bash
+ollama pull llama3.2:1b-instruct-q4_K_M
+```
+
+PowerShell:
+
+```powershell
+$env:CIVILIAN_ENGINE="ollama"
+npm run dev:civilian
+```
+
+macOS/Linux:
+
+```bash
+CIVILIAN_ENGINE=ollama npm run dev:civilian
+```
+
+Open http://127.0.0.1:3002. Once the status says **Local AI ready**, disconnect Wi-Fi and use the app normally. The browser talks only to the local FieldLink server, which talks to Ollama at `127.0.0.1:11434`.
+
+For a rehearsal without Ollama, use the visible scripted kill switch:
+
+```powershell
+$env:CIVILIAN_ENGINE="scripted"
+npm run dev:civilian
+```
+
+The model returns only validated guide IDs and situation categories. All displayed safety steps are loaded from the civilian app's offline CDC, Ready.gov, FDA, and American Red Cross guide cards.
+
+For structured terminal diagnostics, restart with debug logging enabled. This logs full prompts and raw model JSON locally, so use it only with demo data:
+
+```powershell
+$env:CIVILIAN_DEBUG="1"
+$env:CIVILIAN_ENGINE="ollama"
+npm run dev:civilian
+```
+
+Each `/api/plan` response includes a short trace ID that matches the terminal events for deterministic routing, Ollama attempts, parsed output, safety filtering, and the final guide list.
+
 ## Environment
 
 See `.env.example`.
@@ -53,6 +97,9 @@ See `.env.example`.
 - `ENGINE=scripted|qvac`
 - `NET_PROFILE=clean|degraded|hostile`
 - `HQ_INGEST_URL=http://127.0.0.1:3001/api/ingest` (Thunderbolt: `http://169.254.x.x:3001/api/ingest`)
+- `CIVILIAN_ENGINE=ollama|scripted`
+- `OLLAMA_URL=http://127.0.0.1:11434`
+- `OLLAMA_MODEL=llama3.2:1b-instruct-q4_K_M`
 
 ## Demo
 

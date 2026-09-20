@@ -129,7 +129,7 @@ export function App() {
           />
           <div className="actions">
             <button className="primary" disabled={!ready || busy || !text.trim()} onClick={() => void submit()}>
-              Send structured update
+              {!ready ? 'Warming model…' : busy ? 'Sending…' : 'Send structured update'}
             </button>
             <button className="ghost" disabled={!ready || busy} onClick={() => void captureVoice()}>
               Voice
