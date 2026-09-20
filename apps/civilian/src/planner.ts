@@ -46,7 +46,7 @@ export function deterministicChecks(request: PlanRequest): DeterministicResult {
     hazards.push('severe_bleeding');
     immediateDanger = true;
   }
-  if (matches(text, /(?:house|building|room|kitchen) (?:is )?on fire|smell(?:s|ing)? (?:of )?gas|building (?:is )?collaps|active flood|rising floodwater/)) {
+  if (matches(text, /(?:house|building|room|kitchen) (?:is )?on fire|smell(?:s|ing)? (?:of )?gas|building (?:is )?collaps|active flood|rising floodwater|fast-moving water|water (?:is )?(?:entering|filling) (?:the )?(?:house|home|room|street)/)) {
     forcedGuideIds.push('immediate-danger');
     hazards.push('immediate_danger');
     immediateDanger = true;
@@ -68,7 +68,7 @@ export function deterministicChecks(request: PlanRequest): DeterministicResult {
     candidateGuideIds.push('power-outage');
     hazards.push('power_outage');
   }
-  if (matches(text, /water|tap|boil|contamin|unsafe to drink|strange smell/)) {
+  if (matches(text, /(?:tap|drinking|well|bottled) water|water (?:smell|taste|look)|boil(?:ing)? (?:the )?water|boil (?:water )?advisory|contaminated water|unsafe (?:to drink|water)|strange smell (?:from|in) (?:the )?(?:tap|water)/)) {
     candidateGuideIds.push('unsafe-water');
     hazards.push('unsafe_water');
   }
@@ -92,7 +92,7 @@ export function deterministicChecks(request: PlanRequest): DeterministicResult {
     candidateGuideIds.push('earthquake-safety');
     hazards.push('earthquake');
   }
-  if (matches(text, /flood|floodwater|roads? (?:are )?(?:underwater|flooded)|water (?:is )?rising/)) {
+  if (matches(text, /flood|floodwater|roads? (?:are )?(?:underwater|flooded)|(?:road|street).*(?:rising|fast-moving|filling|water)|(?:rising|fast-moving) water|water (?:is )?(?:rising|entering|filling)/)) {
     candidateGuideIds.push('flood-safety');
     hazards.push('flood');
   }

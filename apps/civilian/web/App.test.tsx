@@ -65,4 +65,44 @@ describe('civilian UI', () => {
     expect(screen.getByText(/Source: American Red Cross/)).toBeInTheDocument();
     expect(screen.getByText(/It did not write the safety steps/)).toBeInTheDocument();
   });
+
+  it('keeps the original situation when answering a follow-up question', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ json: async () => ({ status: 'ready', engine: 'ollama', model: 'llama', local: true, warmupMs: 3 }) })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          analysis: { hazards: [], immediateDanger: false, confidence: .4 },
+          plan: [], followUpQuestion: 'What can you see, hear, or smell, and is anyone injured?',
+          runtime: { engine: 'ollama', model: 'llama', local: true, cloudCalls: 0 },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          analysis: { hazards: ['active_flood'], immediateDanger: true, confidence: .9 },
+          plan: [{
+            guideId: 'flood-safety', title: 'Move away from floodwater', priority: 'immediate',
+            reason: 'You reported rising floodwater.', steps: ['Move to higher ground.'], warnings: [],
+            sourceName: 'Ready.gov', sourceUrl: 'https://example.com', reviewedAt: '2026-09-19',
+          }],
+          followUpQuestion: null,
+          runtime: { engine: 'ollama', model: 'llama', local: true, cloudCalls: 0 },
+        }),
+      });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText('Describe what is happening'), { target: { value: 'Something feels wrong outside.' } });
+    fireEvent.click(await screen.findByRole('button', { name: /Build my offline plan/ }));
+    expect(await screen.findByText('What can you see, hear, or smell, and is anyone injured?')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Add details to the situation'), { target: { value: 'The street is filling with fast-moving water.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send details' }));
+    expect(await screen.findByText('Move to higher ground.')).toBeInTheDocument();
+
+    const secondPlanRequest = JSON.parse(fetchMock.mock.calls[2]?.[1]?.body as string);
+    expect(secondPlanRequest.situation).toContain('Something feels wrong outside.');
+    expect(secondPlanRequest.situation).toContain('Additional detail: The street is filling with fast-moving water.');
+  });
 });
