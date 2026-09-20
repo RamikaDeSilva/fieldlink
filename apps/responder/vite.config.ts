@@ -1,17 +1,18 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import { loadEngine } from '@fieldlink/triage';
+import { loadAndWarmEngine } from '@fieldlink/triage';
 import { createResponderApp } from './src/create-app.ts';
 import { honoApiPlugin } from '../vite-hono.ts';
 
-const { app, engine } = createResponderApp({
-  engine: await loadEngine(),
-});
+const engine = await loadAndWarmEngine();
+const { app } = createResponderApp({ engine });
 
 export default defineConfig({
   plugins: [
     react(),
-    honoApiPlugin('responder-api', () => app, () => engine.warmup()),
+    honoApiPlugin('responder-api', () => app, async () => {
+      if (engine.health().status !== 'ready') await engine.warmup();
+    }),
   ],
   root: 'web',
   server: {
