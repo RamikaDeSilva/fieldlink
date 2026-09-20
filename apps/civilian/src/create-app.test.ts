@@ -118,6 +118,7 @@ describe('civilian API', () => {
   it.each([
     ['What should I do after an earthquake?', 'earthquake-safety'],
     ['The roads are flooded and we are stuck at home.', 'flood-safety'],
+    ['The street is filling with fast-moving water.', 'flood-safety'],
     ['There is heavy smoke outside from a wildfire.', 'wildfire-smoke'],
   ])('routes an ordinary disaster prompt to its offline guide', async (situation, expectedGuide) => {
     const engine = await readyScripted();
