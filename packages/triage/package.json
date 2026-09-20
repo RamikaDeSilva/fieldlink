@@ -7,8 +7,5 @@
   },
   "dependencies": {
     "@fieldlink/contract": "*"
-  },
-  "optionalDependencies": {
-    "@qvac/sdk": "^0.19.1"
   }
 }
