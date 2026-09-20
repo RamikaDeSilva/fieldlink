@@ -18,6 +18,7 @@ const FOLLOW_UP_QUESTIONS: Record<FollowUpKey, string> = {
 
 export type DeterministicResult = {
   forcedGuideIds: GuideId[];
+  candidateGuideIds: GuideId[];
   hazards: Hazard[];
   immediateDanger: boolean;
   medicalAdviceRequest: boolean;
@@ -32,6 +33,7 @@ export function deterministicChecks(request: PlanRequest): DeterministicResult {
   const text = request.situation.trim();
   const forcedGuideIds: GuideId[] = [];
   const hazards: Hazard[] = [];
+  const candidateGuideIds: GuideId[] = [];
   let immediateDanger = false;
 
   if (matches(text, /unresponsive|not breathing|isn't breathing|no pulse|cardiac arrest/)) {
@@ -54,6 +56,7 @@ export function deterministicChecks(request: PlanRequest): DeterministicResult {
   if (medicalAdviceRequest) {
     return {
       forcedGuideIds: ['medical-boundary'],
+      candidateGuideIds: ['medical-boundary'],
       hazards: ['medication'],
       immediateDanger: false,
       medicalAdviceRequest: true,
@@ -61,12 +64,52 @@ export function deterministicChecks(request: PlanRequest): DeterministicResult {
     };
   }
 
+  if (matches(text, /power|electricity|blackout|generator|refrigerator/)) {
+    candidateGuideIds.push('power-outage');
+    hazards.push('power_outage');
+  }
+  if (matches(text, /water|tap|boil|contamin|unsafe to drink|strange smell/)) {
+    candidateGuideIds.push('unsafe-water');
+    hazards.push('unsafe_water');
+  }
+  if (matches(text, /evacuat|ordered to leave|leave (?:the|our) (?:area|home|building)/)) {
+    candidateGuideIds.push('evacuate');
+    hazards.push('evacuation');
+  }
+  if (matches(text, /shelter in place|stay inside|remain indoors/)) {
+    candidateGuideIds.push('shelter-in-place');
+    hazards.push('shelter');
+  }
+  if (matches(text, /insulin|medicine|medication|prescription|refrigerat/)) {
+    candidateGuideIds.push('medication-continuity');
+    hazards.push('medication');
+  }
+  if (matches(text, /separated|reunif|meeting place|out-of-area contact/)) {
+    candidateGuideIds.push('family-reunification');
+    hazards.push('reunification');
+  }
+  if (matches(text, /earthquake|aftershock|ground (?:is )?shaking/)) {
+    candidateGuideIds.push('earthquake-safety');
+    hazards.push('earthquake');
+  }
+  if (matches(text, /flood|floodwater|roads? (?:are )?(?:underwater|flooded)|water (?:is )?rising/)) {
+    candidateGuideIds.push('flood-safety');
+    hazards.push('flood');
+  }
+  if (matches(text, /wildfire|forest fire|brush fire|heavy smoke|smoke outside|ash (?:is )?falling/)) {
+    candidateGuideIds.push('wildfire-smoke');
+    hazards.push('wildfire_smoke');
+  }
+
+  const knownCandidates = [...new Set([...forcedGuideIds, ...candidateGuideIds])];
+
   return {
     forcedGuideIds,
-    hazards,
+    candidateGuideIds: knownCandidates,
+    hazards: [...new Set(hazards)],
     immediateDanger,
     medicalAdviceRequest: false,
-    tooVague: text.split(/\s+/).filter(Boolean).length < 5 && forcedGuideIds.length === 0,
+    tooVague: knownCandidates.length === 0 && householdGuides(request.household).length === 0,
   };
 }
 
@@ -93,6 +136,9 @@ function reasonFor(id: GuideId, request: PlanRequest): string {
     pets: 'Your household profile includes pets.',
     'family-reunification': 'A shared meeting and contact plan can reduce separation during disruption.',
     'medical-boundary': 'You asked for diagnosis, prescribing, or a medication change that this app cannot safely provide.',
+    'earthquake-safety': 'You described an earthquake or possible aftershock conditions.',
+    'flood-safety': 'You described flooding, rising water, or flooded roads.',
+    'wildfire-smoke': 'You described wildfire, heavy smoke, or falling ash nearby.',
   };
   return reasons[id] ?? 'This guide matches details in the situation you described.';
 }
@@ -104,7 +150,14 @@ export function assemblePlan(
 ): { plan: PlanItem[]; hazards: Hazard[]; immediateDanger: boolean; followUpQuestion: string | null } {
   const guideIds = deterministic.medicalAdviceRequest
     ? deterministic.forcedGuideIds
-    : [...deterministic.forcedGuideIds, ...model.guideIds, ...householdGuides(request.household)];
+    : deterministic.tooVague
+      ? deterministic.forcedGuideIds
+      : [
+          ...deterministic.forcedGuideIds,
+          ...model.guideIds.filter((id) => deterministic.candidateGuideIds.includes(id)),
+          ...deterministic.candidateGuideIds,
+          ...householdGuides(request.household),
+        ];
   const uniqueIds = [...new Set(guideIds)].slice(0, 5);
   const plan = uniqueIds.flatMap((id) => {
     const guide = GUIDE_BY_ID.get(id);
@@ -125,8 +178,8 @@ export function assemblePlan(
   const followUpKey = deterministic.tooVague ? 'describe_hazard' : model.followUpKey;
   return {
     plan,
-    hazards: [...new Set([...deterministic.hazards, ...model.hazards])],
-    immediateDanger: deterministic.immediateDanger || model.immediateDanger,
+    hazards: deterministic.hazards,
+    immediateDanger: deterministic.immediateDanger,
     followUpQuestion: plan.length === 0 || deterministic.tooVague
       ? FOLLOW_UP_QUESTIONS[followUpKey ?? 'describe_hazard']
       : null,

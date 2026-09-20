@@ -80,6 +80,16 @@ npm run dev:civilian
 
 The model returns only validated guide IDs and situation categories. All displayed safety steps are loaded from the civilian app's offline CDC, Ready.gov, FDA, and American Red Cross guide cards.
 
+For structured terminal diagnostics, restart with debug logging enabled. This logs full prompts and raw model JSON locally, so use it only with demo data:
+
+```powershell
+$env:CIVILIAN_DEBUG="1"
+$env:CIVILIAN_ENGINE="ollama"
+npm run dev:civilian
+```
+
+Each `/api/plan` response includes a short trace ID that matches the terminal events for deterministic routing, Ollama attempts, parsed output, safety filtering, and the final guide list.
+
 ## Environment
 
 See `.env.example`.

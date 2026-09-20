@@ -11,6 +11,9 @@ export const HAZARDS = [
   'children',
   'pets',
   'reunification',
+  'earthquake',
+  'flood',
+  'wildfire_smoke',
 ] as const;
 
 export type Hazard = (typeof HAZARDS)[number];
@@ -38,6 +41,9 @@ export const GUIDE_IDS = [
   'pets',
   'family-reunification',
   'medical-boundary',
+  'earthquake-safety',
+  'flood-safety',
+  'wildfire-smoke',
 ] as const;
 
 export type GuideId = (typeof GUIDE_IDS)[number];
@@ -93,6 +99,7 @@ export type PlanResponse = {
   followUpQuestion: string | null;
   notice?: string;
   runtime: {
+    requestId: string;
     engine: 'ollama' | 'scripted';
     model: string;
     local: true;

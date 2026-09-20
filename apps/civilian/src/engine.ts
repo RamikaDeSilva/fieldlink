@@ -1,4 +1,5 @@
 import { GUIDES } from './guides.ts';
+import { civilianLog, errorLogFields, promptLogFields } from './logger.ts';
 import {
   GUIDE_IDS,
   HAZARDS,
@@ -35,7 +36,7 @@ const analysisSchema = {
 
 export interface CivilianEngine {
   warmup(): Promise<void>;
-  analyze(request: PlanRequest): Promise<ModelAnalysis>;
+  analyze(request: PlanRequest, context?: { requestId: string }): Promise<ModelAnalysis>;
   health(): EngineHealth;
 }
 
@@ -102,14 +103,17 @@ export class OllamaEngine implements CivilianEngine {
     if (this.state.status === 'ready') return;
     const started = performance.now();
     this.state = { ...this.state, status: 'loading', error: undefined };
+    civilianLog('engine.warmup.started', { engine: 'ollama', model: this.state.model, baseUrl: this.baseUrl });
     try {
       const version = await fetch(`${this.baseUrl}/api/version`, { signal: AbortSignal.timeout(5_000) });
       if (!version.ok) throw new Error(`Ollama returned HTTP ${version.status}`);
+      civilianLog('engine.ollama.connected', { status: version.status });
       await this.requestAnalysis({
         situation: 'Power is out after a storm.',
         household: { children: false, olderAdults: false, pets: false, mobilityNeeds: false, medicationNeeds: false },
-      });
+      }, 'warmup');
       this.state = { ...this.state, status: 'ready', warmupMs: Math.round(performance.now() - started), error: undefined };
+      civilianLog('engine.warmup.ready', { model: this.state.model, warmupMs: this.state.warmupMs });
     } catch (error) {
       this.state = {
         ...this.state,
@@ -117,23 +121,38 @@ export class OllamaEngine implements CivilianEngine {
         warmupMs: Math.round(performance.now() - started),
         error: error instanceof Error ? error.message : 'Unable to start local AI',
       };
+      civilianLog('engine.warmup.failed', { ...errorLogFields(error), warmupMs: this.state.warmupMs }, 'error');
       throw error;
     }
   }
 
-  async analyze(request: PlanRequest): Promise<ModelAnalysis> {
+  async analyze(request: PlanRequest, context?: { requestId: string }): Promise<ModelAnalysis> {
     let latestError: unknown;
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
-        return await this.requestAnalysis(request);
+        civilianLog('engine.analysis.attempt', { requestId: context?.requestId, attempt: attempt + 1 });
+        return await this.requestAnalysis(request, context?.requestId, attempt + 1);
       } catch (error) {
         latestError = error;
+        civilianLog('engine.analysis.attempt_failed', {
+          requestId: context?.requestId,
+          attempt: attempt + 1,
+          ...errorLogFields(error),
+        }, 'warn');
       }
     }
     throw latestError instanceof Error ? latestError : new Error('Local AI returned invalid data');
   }
 
-  private async requestAnalysis(request: PlanRequest): Promise<ModelAnalysis> {
+  private async requestAnalysis(request: PlanRequest, requestId?: string, attempt?: number): Promise<ModelAnalysis> {
+    const started = performance.now();
+    civilianLog('engine.ollama.request', {
+      requestId,
+      attempt,
+      model: this.state.model,
+      ...promptLogFields(request.situation),
+      household: request.household,
+    });
     const response = await fetch(`${this.baseUrl}/api/chat`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -142,7 +161,7 @@ export class OllamaEngine implements CivilianEngine {
         stream: false,
         format: analysisSchema,
         keep_alive: '30m',
-        options: { temperature: 0, num_ctx: 2048 },
+        options: { temperature: 0, num_ctx: 2048, num_predict: 256 },
         messages: [
           { role: 'system', content: systemPrompt() },
           { role: 'user', content: JSON.stringify(request) },
@@ -150,10 +169,31 @@ export class OllamaEngine implements CivilianEngine {
       }),
       signal: AbortSignal.timeout(60_000),
     });
-    if (!response.ok) throw new Error(`Ollama returned HTTP ${response.status}`);
+    civilianLog('engine.ollama.response', {
+      requestId,
+      attempt,
+      status: response.status,
+      latencyMs: Math.round(performance.now() - started),
+    });
+    if (!response.ok) {
+      const detail = await response.text();
+      throw new Error(`Ollama returned HTTP ${response.status}${detail ? `: ${detail.slice(0, 300)}` : ''}`);
+    }
     const body = await response.json() as { message?: { content?: string } };
     if (!body.message?.content) throw new Error('Ollama returned an empty response');
-    return parseModelAnalysis(JSON.parse(body.message.content));
+    const parsed = parseModelAnalysis(JSON.parse(body.message.content));
+    civilianLog('engine.analysis.parsed', {
+      requestId,
+      attempt,
+      hazards: parsed.hazards,
+      needs: parsed.needs,
+      immediateDanger: parsed.immediateDanger,
+      guideIds: parsed.guideIds,
+      confidence: parsed.confidence,
+      followUpKey: parsed.followUpKey,
+      ...(process.env.CIVILIAN_DEBUG === '1' ? { raw: body.message.content } : {}),
+    });
+    return parsed;
   }
 }
 
@@ -176,7 +216,8 @@ export class ScriptedCivilianEngine implements CivilianEngine {
     this.state = { ...this.state, status: 'ready', warmupMs: Math.round(performance.now() - started) };
   }
 
-  async analyze(request: PlanRequest): Promise<ModelAnalysis> {
+  async analyze(request: PlanRequest, context?: { requestId: string }): Promise<ModelAnalysis> {
+    civilianLog('engine.scripted.analysis', { requestId: context?.requestId, ...promptLogFields(request.situation) });
     const text = request.situation.toLowerCase();
     const guideIds: GuideId[] = [];
     const hazards: Hazard[] = [];

@@ -67,8 +67,11 @@ export function App() {
         const response = await fetch('/api/health');
         const next = await response.json() as EngineHealth;
         if (cancelled) return;
+        console.info('[civilian.ui] health', next);
         setHealth(next);
-        if (next.status === 'loading') timer = window.setTimeout(() => void poll(), 500);
+        if (next.status !== 'ready') {
+          timer = window.setTimeout(() => void poll(), next.status === 'error' ? 2_000 : 500);
+        }
       } catch {
         if (!cancelled) timer = window.setTimeout(() => void poll(), 900);
       }
@@ -95,6 +98,10 @@ export function App() {
   async function submit() {
     setBusy(true);
     setError('');
+    console.info('[civilian.ui] plan.request', {
+      inputChars: situation.trim().length,
+      household,
+    });
     try {
       const response = await fetch('/api/plan', {
         method: 'POST',
@@ -103,8 +110,17 @@ export function App() {
       });
       const body = await response.json() as PlanResponse & { error?: string };
       if (!response.ok) throw new Error(body.error ?? `Request failed (${response.status})`);
+      console.info('[civilian.ui] plan.response', {
+        requestId: body.runtime.requestId,
+        engine: body.runtime.engine,
+        hazards: body.analysis.hazards,
+        guideIds: body.plan.map((item) => item.guideId),
+        followUpQuestion: body.followUpQuestion,
+        notice: body.notice,
+      });
       setResult(body);
     } catch (caught) {
+      console.error('[civilian.ui] plan.failed', caught);
       setError(caught instanceof Error ? caught.message : 'Unable to build a plan');
     } finally {
       setBusy(false);
@@ -196,7 +212,7 @@ export function App() {
               </div>
             ) : null}
             {error ? <p className="form-error" role="alert">{error}</p> : null}
-            <button className="submit-button" type="button" disabled={!ready || busy || situation.trim().length < 3} onClick={() => void submit()}>
+            <button className="submit-button" type="button" disabled={!ready || busy || situation.trim().length < 1} onClick={() => void submit()}>
               <span>{!ready ? 'Warming local AI…' : busy ? 'Building your plan…' : 'Build my offline plan'}</span>
               <b aria-hidden="true">→</b>
             </button>
@@ -231,7 +247,7 @@ export function App() {
           <div className="ai-explainer">
             <span className="explainer-mark">AI</span>
             <div><strong>AI prioritized these guides. It did not write the safety steps.</strong><p>Every instruction above was loaded from vetted guidance stored on this laptop.</p></div>
-            <dl><div><dt>Engine</dt><dd>{result.runtime.engine}</dd></div><div><dt>Cloud calls</dt><dd>{result.runtime.cloudCalls}</dd></div></dl>
+            <dl><div><dt>Engine</dt><dd>{result.runtime.engine}</dd></div><div><dt>Cloud calls</dt><dd>{result.runtime.cloudCalls}</dd></div><div><dt>Trace</dt><dd>{result.runtime.requestId ?? '—'}</dd></div></dl>
           </div>
         </section>
       )}

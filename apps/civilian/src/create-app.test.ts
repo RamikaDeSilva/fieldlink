@@ -52,6 +52,18 @@ describe('civilian API', () => {
     expect(body.followUpQuestion).toContain('see, hear, or smell');
   });
 
+  it('accepts a short greeting and asks for useful details', async () => {
+    const engine = await readyScripted();
+    const { app } = createCivilianApp({ engine });
+    const response = await post(app, 'hi');
+    const body = await response.json();
+    expect(response.status).toBe(200);
+    expect(body.plan).toEqual([]);
+    expect(body.analysis.immediateDanger).toBe(false);
+    expect(body.analysis.hazards).toEqual([]);
+    expect(body.followUpQuestion).toContain('anyone injured');
+  });
+
   it('declines prescription requests without returning model-selected instructions', async () => {
     const engine = await readyScripted();
     const { app } = createCivilianApp({ engine });
@@ -78,5 +90,40 @@ describe('civilian API', () => {
     const body = await response.json();
     expect(JSON.stringify(body.plan)).not.toContain('<img');
     expect(body.plan[0].sourceName).toBe('CDC');
+  });
+
+  it('does not allow the model to introduce unsupported emergency guides', async () => {
+    const overSelectingEngine: CivilianEngine = {
+      async warmup() {},
+      health(): EngineHealth {
+        return { status: 'ready', engine: 'ollama', model: 'test', local: true, warmupMs: 0 };
+      },
+      async analyze(): Promise<ModelAnalysis> {
+        return {
+          hazards: ['cardiac_arrest', 'severe_bleeding'], needs: [], immediateDanger: true,
+          guideIds: ['adult-cpr', 'severe-bleeding', 'unsafe-water'], confidence: 0.5, followUpKey: null,
+        };
+      },
+    };
+    const { app } = createCivilianApp({ engine: overSelectingEngine });
+    const response = await post(app, 'The tap water smells strange after the earthquake.');
+    const body = await response.json();
+    expect(body.analysis).toMatchObject({ hazards: ['unsafe_water', 'earthquake'], immediateDanger: false });
+    expect(body.plan.map((item: { guideId: string }) => item.guideId)).toEqual([
+      'unsafe-water',
+      'earthquake-safety',
+    ]);
+  });
+
+  it.each([
+    ['What should I do after an earthquake?', 'earthquake-safety'],
+    ['The roads are flooded and we are stuck at home.', 'flood-safety'],
+    ['There is heavy smoke outside from a wildfire.', 'wildfire-smoke'],
+  ])('routes an ordinary disaster prompt to its offline guide', async (situation, expectedGuide) => {
+    const engine = await readyScripted();
+    const { app } = createCivilianApp({ engine });
+    const response = await post(app, situation);
+    const body = await response.json();
+    expect(body.plan.some((item: { guideId: string }) => item.guideId === expectedGuide)).toBe(true);
   });
 });
