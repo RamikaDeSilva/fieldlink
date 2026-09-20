@@ -1,5 +1,38 @@
 # FieldLink demo runbook
 
+## Civilian Meta-track demo
+
+Download the model before the venue network becomes unreliable:
+
+```bash
+ollama pull llama3.2:1b-instruct-q4_K_M
+```
+
+PowerShell rehearsal:
+
+```powershell
+$env:CIVILIAN_ENGINE="ollama"
+npm run dev:civilian
+```
+
+Wait for **Local AI ready** at http://127.0.0.1:3002, submit one hidden warmup scenario, and then turn Wi-Fi off.
+
+1. Explain that cloud help may disappear with disaster infrastructure.
+2. Show Wi-Fi off and the `Meta Llama 3.2 · Runs on this laptop · No cloud` proof line.
+3. Submit something like `An earthquake knocked out power. The tap water smells strange. I am with my grandmother who needs insulin and our dog.` Select older adults, medication needs, and pets.
+4. Point out that AI prioritized the guides, while every safety step came from stored, attributed sources.
+5. Start over and submit: `My neighbor cut their leg and blood is spurting.` Show the deterministic immediate-danger override.
+6. Close with the path from a laptop proof to native mobile inference through ExecuTorch.
+
+Civilian kill switch:
+
+```powershell
+$env:CIVILIAN_ENGINE="scripted"
+npm run dev:civilian
+```
+
+The UI labels scripted mode in its results telemetry; do not represent it as a live Llama run.
+
 The Hour-6 gate is one command:
 
 ```bash

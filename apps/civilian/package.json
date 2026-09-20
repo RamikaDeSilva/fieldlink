@@ -1,0 +1,21 @@
+{
+  "name": "@fieldlink/civilian",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --config vite.config.ts --configLoader runner",
+    "build": "vite build --config vite.config.ts --configLoader runner",
+    "preview": "vite preview --config vite.config.ts --port 3002"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.19.4",
+    "hono": "^4.9.8",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^5.0.3",
+    "vite": "^7.1.6"
+  }
+}

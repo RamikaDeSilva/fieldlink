@@ -1,8 +1,13 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fixtures } from '@fieldlink/contract';
 import { lookupDirective } from '@fieldlink/triage';
+import { App } from './App.tsx';
 import { AirplaneModeBanner, DirectiveCard, TelemetryPanel } from './components.tsx';
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe('responder UI', () => {
   it('shows airplane-mode / no-radio chrome', () => {
@@ -37,5 +42,34 @@ describe('responder UI', () => {
     expect(screen.getByTestId('telemetry')).toHaveTextContent('warm_ms');
     expect(screen.getByTestId('telemetry')).toHaveTextContent('8');
     expect(screen.getByTestId('telemetry')).toHaveTextContent('0 cloud calls');
+  });
+
+  it('explains warming and sending states in the submit button', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        json: async () => ({
+          status: 'ready',
+          model: 'scripted',
+          load_ms: 1,
+          warm_ms: 2,
+          engine: 'scripted',
+          net_profile: 'clean',
+        }),
+      })
+      .mockImplementationOnce(() => new Promise(() => undefined));
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<App />);
+    expect(screen.getByRole('button', { name: 'Warming model…' })).toBeDisabled();
+
+    const submit = await screen.findByRole('button', { name: 'Send structured update' });
+    fireEvent.change(screen.getByLabelText('Tactical stealth sitrep'), {
+      target: { value: 'Victim is unresponsive and not breathing' },
+    });
+    expect(submit).toBeEnabled();
+
+    fireEvent.click(submit);
+    expect(screen.getByRole('button', { name: 'Sending…' })).toBeDisabled();
   });
 });
