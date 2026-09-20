@@ -3,7 +3,7 @@ import type { AddressInfo } from 'node:net';
 import type { Hono } from 'hono';
 import { createHqApp } from '../apps/hq/src/create-app.ts';
 import { createResponderApp } from '../apps/responder/src/create-app.ts';
-import { ScriptedEngine } from '@fieldlink/triage';
+import { ScriptedEngine, type VoiceTranscriber } from '@fieldlink/triage';
 
 type Started = {
   close: () => Promise<void>;
@@ -31,7 +31,7 @@ function listen(app: Hono): Promise<Started> {
   });
 }
 
-export async function startPair() {
+export async function startPair(options: { transcriber?: VoiceTranscriber } = {}) {
   const hq = createHqApp();
   const hqStarted = await listen(hq.app);
   const engine = new ScriptedEngine();
@@ -39,6 +39,7 @@ export async function startPair() {
   const responder = createResponderApp({
     engine,
     ingestUrl: `${hqStarted.url}/api/ingest`,
+    transcriber: options.transcriber,
   });
   const responderStarted = await listen(responder.app);
   return {

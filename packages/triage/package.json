@@ -6,6 +6,8 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@fieldlink/contract": "*"
+    "@fieldlink/contract": "*",
+    "@huggingface/transformers": "4.3.0",
+    "@qvac/sdk": "^0.19.1"
   }
 }

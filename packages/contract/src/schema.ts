@@ -88,6 +88,7 @@ export const HealthStatus = z.object({
   warm_ms: z.number(),
   engine: z.string(),
   net_profile: z.string().optional(),
+  error: z.string().optional(),
 });
 
 export type HealthStatus = z.infer<typeof HealthStatus>;

@@ -1,18 +1,32 @@
 import { serve } from '@hono/node-server';
-import { loadEngine } from '@fieldlink/triage';
+import { loadEngine, loadTranscriber } from '@fieldlink/triage';
 import { createResponderApp } from './create-app.ts';
 
 export async function startResponder(
   port = Number(process.env.RESPONDER_PORT ?? 3000),
   deps: Parameters<typeof createResponderApp>[0] = {},
 ) {
+  const engine = deps.engine ?? (await loadEngine());
+  const transcriber = deps.transcriber ?? (await loadTranscriber());
   const created = createResponderApp({
     ...deps,
-    engine: deps.engine ?? (await loadEngine()),
+    engine,
+    transcriber,
   });
   if (created.engine.health().status !== 'ready') {
-    await created.engine.warmup();
+    await created.engine.warmup().catch((error) => {
+      console.error(
+        'Responder local AI warmup failed:',
+        error instanceof Error ? error.message : error,
+      );
+    });
   }
+  await created.transcriber?.warmup?.().catch((error) => {
+    console.warn(
+      'Local STT warmup failed; type a sitrep until voice models are prefetched:',
+      error instanceof Error ? error.message : error,
+    );
+  });
   const server = serve({ fetch: created.app.fetch, port, hostname: '0.0.0.0' });
   return { ...created, server, port };
 }

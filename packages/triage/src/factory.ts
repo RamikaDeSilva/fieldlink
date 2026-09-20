@@ -1,5 +1,6 @@
 import type { LlmEngine } from './engine.ts';
 import { ScriptedEngine } from './scripted.ts';
+import { WhisperTinyTranscriber, type VoiceTranscriber } from './whisper.ts';
 
 export type EngineKind = 'scripted' | 'qvac';
 
@@ -20,4 +21,15 @@ export async function loadEngine(kind: EngineKind = resolveEngineKind()): Promis
     return new QvacEngine();
   }
   return new ScriptedEngine();
+}
+
+export async function loadTranscriber(
+  kind: EngineKind = resolveEngineKind(),
+): Promise<VoiceTranscriber | undefined> {
+  if (process.env.VOICE === 'off') return undefined;
+  if (kind === 'qvac') {
+    const { QvacWhisperTranscriber } = await import('./qvac-voice.ts');
+    return new QvacWhisperTranscriber();
+  }
+  return new WhisperTinyTranscriber();
 }

@@ -4,18 +4,29 @@ import type { FieldReport, HealthStatus } from '@fieldlink/contract';
 import {
   assembleReport,
   ScriptedEngine,
+  resolveEngineKind,
   type LlmEngine,
+  type VoiceTranscriber,
 } from '@fieldlink/triage';
 import { Outbox, resolveNetProfile, type SendFn } from '@fieldlink/transport';
 
 export type ResponderDeps = {
   engine?: LlmEngine;
+  transcriber?: VoiceTranscriber;
   send?: SendFn;
   ingestUrl?: string;
 };
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export function createResponderApp(deps: ResponderDeps = {}) {
+  if (!deps.engine && resolveEngineKind() === 'qvac') {
+    throw new Error('ENGINE=qvac requires loadEngine() to inject QvacEngine; ScriptedEngine will not be substituted');
+  }
   const engine: LlmEngine = deps.engine ?? new ScriptedEngine();
+  const transcriber = deps.transcriber;
   const outbox = new Outbox({
     send: deps.send,
     ingestUrl: deps.ingestUrl,
@@ -31,16 +42,33 @@ export function createResponderApp(deps: ResponderDeps = {}) {
     return c.json(health);
   });
 
+  app.get('/api/voice/health', (c) => {
+    if (!transcriber && !engine.transcribe) {
+      return c.json({ status: 'error', engine: 'none', local: true, error: 'voice_unavailable' });
+    }
+    return c.json(transcriber?.health() ?? { status: 'ready', engine: 'engine', local: true });
+  });
+
   app.post('/api/report', async (c) => {
     if (engine.health().status !== 'ready') {
-      return c.json({ error: 'engine_not_ready' }, 503);
+      return c.json({ error: 'engine_not_ready', health: engine.health() }, 503);
     }
-    const body = (await c.req.json()) as { text?: string; mode?: 'text' | 'voice' };
+    let body: { text?: string; mode?: 'text' | 'voice' };
+    try {
+      body = (await c.req.json()) as { text?: string; mode?: 'text' | 'voice' };
+    } catch {
+      return c.json({ error: 'invalid_json' }, 400);
+    }
     const text = body.text?.trim() ?? '';
     if (!text) return c.json({ error: 'empty_input' }, 400);
 
     const started = performance.now();
-    const classification = await engine.classify(text);
+    let classification;
+    try {
+      classification = await engine.classify(text);
+    } catch (error) {
+      return c.json({ error: 'classification_failed', message: errorMessage(error) }, 500);
+    }
     const latency = Math.round(performance.now() - started);
     const report: FieldReport = assembleReport({
       text,
@@ -57,12 +85,32 @@ export function createResponderApp(deps: ResponderDeps = {}) {
   });
 
   app.post('/api/transcribe', async (c) => {
-    if (!engine.transcribe) {
+    const transcribe = transcriber
+      ? (audio: Uint8Array, mimeType?: string) => transcriber.transcribe(audio, mimeType)
+      : engine.transcribe?.bind(engine);
+    if (!transcribe) {
       return c.json({ error: 'voice_unavailable', text: '' }, 501);
     }
+    if (transcriber && transcriber.health().status !== 'ready') {
+      return c.json(
+        { error: transcriber.health().error ?? 'voice_unavailable', health: transcriber.health() },
+        503,
+      );
+    }
     const audio = new Uint8Array(await c.req.arrayBuffer());
-    const text = await engine.transcribe(audio, c.req.header('content-type') ?? undefined);
-    return c.json({ text, mode: 'voice' });
+    try {
+      const text = await transcribe(audio, c.req.header('content-type') ?? undefined);
+      if (!text) return c.json({ error: 'no_speech_detected', text: '' }, 422);
+      return c.json({
+        text,
+        mode: 'voice',
+        engine: transcriber?.health().engine ?? engine.health().engine,
+        local: true,
+        cloudCalls: 0,
+      });
+    } catch (error) {
+      return c.json({ error: 'transcription_failed', message: errorMessage(error) }, 500);
+    }
   });
 
   app.post('/api/speak', async (c) => {
@@ -70,9 +118,13 @@ export function createResponderApp(deps: ResponderDeps = {}) {
       return c.json({ error: 'tts_unavailable' }, 501);
     }
     const body = (await c.req.json()) as { text?: string };
-    const audio = await engine.speak(body.text ?? '');
-    return c.body(Buffer.from(audio), 200, { 'content-type': 'audio/wav' });
+    try {
+      const audio = await engine.speak(body.text ?? '');
+      return c.body(Buffer.from(audio), 200, { 'content-type': 'audio/wav' });
+    } catch (error) {
+      return c.json({ error: 'tts_failed', message: errorMessage(error) }, 500);
+    }
   });
 
-  return { app, engine, outbox };
+  return { app, engine, outbox, transcriber };
 }
