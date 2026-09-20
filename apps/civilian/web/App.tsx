@@ -361,19 +361,22 @@ export function App() {
       <header className="masthead">
         <a className="brand" href="#top" aria-label="FieldLink Civilian home">
           <span className="brand-mark">FL</span>
-          <span>FieldLink <b>Civilian</b></span>
+          <span className="brand-copy"><strong>FieldLink</strong><small>Civilian safety</small></span>
         </a>
-        <div className={`model-pill ${health?.status ?? 'loading'}`} data-testid="model-status">
-          <i />
-          <span>{health?.status === 'ready' ? 'Local AI ready' : health?.status === 'error' ? 'Local AI unavailable' : 'Warming local AI'}</span>
+        <div className="masthead-status">
+          <span className="offline-label">Private · Offline</span>
+          <div className={`model-pill ${health?.status ?? 'loading'}`} data-testid="model-status">
+            <i />
+            <span>{health?.status === 'ready' ? 'Local AI ready' : health?.status === 'error' ? 'Local AI unavailable' : 'Warming local AI'}</span>
+          </div>
         </div>
       </header>
 
       <section className="chat-layout" id="top">
         <div className="chat-intro">
           <div>
-            <p className="eyebrow">PRIVATE DISASTER GUIDANCE · COMPLETELY LOCAL</p>
-            <h1>What’s happening?</h1>
+            <p className="eyebrow">PERSONAL SAFETY / PRIVATE DISASTER GUIDANCE</p>
+            <h1>Tell us what’s happening.</h1>
             <p>FieldLink turns a stressful description into clear, vetted next steps—without sending anything to the cloud.</p>
           </div>
           {result ? <button className="reset-button" type="button" onClick={startOver}>← Start over</button> : null}

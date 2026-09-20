@@ -3,9 +3,12 @@ import type { FieldReport, HealthStatus } from '@fieldlink/contract';
 export function AirplaneModeBanner() {
   return (
     <div className="banner" data-testid="airplane-banner">
-      <div>
-        <strong>OFF-GRID</strong>
-        <div>Airplane mode. No Wi-Fi. No cellular. Thunderbolt / loopback only.</div>
+      <div className="banner-copy">
+        <span className="banner-icon" aria-hidden="true">⌁</span>
+        <div>
+          <strong>OFF-GRID LINK ACTIVE</strong>
+          <p>Airplane mode. No Wi-Fi. No cellular. Thunderbolt / loopback only.</p>
+        </div>
       </div>
       <div className="dots">
         <span className="dot off">
@@ -25,8 +28,14 @@ export function AirplaneModeBanner() {
 export function TelemetryPanel({ health }: { health: HealthStatus | null }) {
   const ready = health?.status === 'ready';
   return (
-    <aside className="panel" data-testid="telemetry">
-      <p className="eyebrow">Local inference</p>
+    <aside className="panel telemetry-panel" data-testid="telemetry">
+      <div className="panel-heading compact">
+        <span className="section-index">02</span>
+        <div>
+          <p className="eyebrow">System telemetry</p>
+          <h2>Local inference</h2>
+        </div>
+      </div>
       <div className="telemetry">
         <div>
           <span>status</span> <b>{health?.status ?? 'loading'}</b>
@@ -63,15 +72,21 @@ export function DirectiveCard({ report }: { report: FieldReport }) {
   const level = report.triage_level.toLowerCase();
   return (
     <section className="card" data-testid="directive">
-      <p className="eyebrow">How to proceed</p>
-      <div>
+      <div className="directive-heading">
+        <div>
+          <p className="eyebrow">Protocol match confirmed</p>
+          <h2>How to proceed</h2>
+        </div>
+        <span className="directive-source">Verified offline</span>
+      </div>
+      <div className="tags">
         <span className={`tag ${level}`}>{report.triage_level}</span>
         <span className="tag">{report.directive.protocol_id}</span>
         <span className="tag">src:{report.directive.source}</span>
       </div>
       <ol className="steps">
-        {report.directive.steps.map((step) => (
-          <li key={step}>{step}</li>
+        {report.directive.steps.map((step, index) => (
+          <li key={step}><span>{String(index + 1).padStart(2, '0')}</span><p>{step}</p></li>
         ))}
       </ol>
     </section>

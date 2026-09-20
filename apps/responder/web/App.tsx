@@ -189,15 +189,43 @@ export function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <div>
-          <p className="eyebrow">FieldLink · UNIT-7</p>
-          <h1>Field unit</h1>
+        <a className="brand" href="#top" aria-label="FieldLink field unit home">
+          <span className="brand-mark">FL</span>
+          <span className="brand-copy">
+            <strong>FieldLink</strong>
+            <small>Responder network</small>
+          </span>
+        </a>
+        <div className="unit-identity">
+          <span className="unit-status"><i /> Operational</span>
+          <span>Unit 07</span>
         </div>
       </header>
-      <AirplaneModeBanner />
-      <div className="grid">
-        <section className="panel">
-          <label htmlFor="sitrep">Tactical stealth sitrep</label>
+      <main id="top">
+        <div className="mission-heading">
+          <div>
+            <p className="eyebrow">FIELD OPERATIONS / INCIDENT CHANNEL 04</p>
+            <h1>Send a field report.</h1>
+            <p className="mission-copy">Turn a short on-scene description into an immediate, structured protocol directive.</p>
+          </div>
+          <div className="mission-clock" aria-label="Current operating mode">
+            <span>MODE</span>
+            <b>STEALTH</b>
+            <small>LOCAL ONLY</small>
+          </div>
+        </div>
+
+        <AirplaneModeBanner />
+        <div className="grid">
+          <section className="panel input-panel">
+            <div className="panel-heading">
+              <span className="section-index">01</span>
+              <div>
+                <label htmlFor="sitrep">Tactical stealth sitrep</label>
+                <p>State the patient condition, visible hazards, and what changed.</p>
+              </div>
+              <span className="required">Required</span>
+            </div>
           <textarea
             id="sitrep"
             value={text}
@@ -206,24 +234,34 @@ export function App() {
           />
           <div className="actions">
             <button className="primary" disabled={!ready || busy || recording || !text.trim()} onClick={() => void submit()}>
-              {!ready ? 'Warming model…' : busy ? 'Sending…' : 'Send structured update'}
+              <span>{!ready ? 'Warming model…' : busy ? 'Sending…' : 'Send structured update'}</span>
+              <b aria-hidden="true">→</b>
             </button>
             <button
               className="ghost"
               disabled={!ready || busy}
               onClick={() => void (recording ? stopVoice() : startVoice())}
             >
-              {recording ? 'Stop voice' : 'Voice'}
+              {recording ? '■ Stop voice' : '● Voice input'}
             </button>
             <button className="ghost" disabled={!report} onClick={() => void speak()}>
-              Read back
+              Read directive
             </button>
           </div>
-          <p className="status">{status}</p>
-        </section>
-        <TelemetryPanel health={health} />
-      </div>
-      {report ? <div style={{ marginTop: 16 }}><DirectiveCard report={report} /></div> : null}
+            <div className={`status-line ${recording ? 'active' : ''}`} role="status">
+              <i />
+              <span>{status}</span>
+              <small>0 cloud calls</small>
+            </div>
+          </section>
+          <TelemetryPanel health={health} />
+        </div>
+        {report ? <div className="directive-wrap"><DirectiveCard report={report} /></div> : null}
+      </main>
+      <footer>
+        <span>FieldLink / tactical edge system</span>
+        <span>AES-256 · Local inference · No public network</span>
+      </footer>
     </div>
   );
 }
