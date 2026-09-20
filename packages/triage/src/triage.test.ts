@@ -4,6 +4,8 @@ import {
   ScriptedEngine,
   assembleReport,
   dedupeTags,
+  extractJsonObject,
+  loadAndWarmEngine,
   lookupDirective,
   scoreAgreement,
   shouldEscalate,
@@ -61,6 +63,31 @@ describe('voice stretch', () => {
     await expect(transcribeWithEngine(engine, new Uint8Array([0]))).rejects.toThrow(
       'voice_unavailable',
     );
+  });
+});
+
+describe('json slice helper', () => {
+  it('pulls an object out of think-tags and stray whitespace', () => {
+    const raw = `
+<think> The victim is bleeding. </think>
+  { "protocol": "massive_hemorrhage", "triage_level": "Immediate", "condition_tags": ["arterial_bleed"] }
+`;
+    const sliced = extractJsonObject(raw);
+    expect(sliced.startsWith('{')).toBe(true);
+    expect(sliced.endsWith('}')).toBe(true);
+    expect(JSON.parse(sliced).protocol).toBe('massive_hemorrhage');
+  });
+
+  it('throws when no object is present', () => {
+    expect(() => extractJsonObject('no json here')).toThrow('no_json_object');
+  });
+});
+
+describe('loadAndWarmEngine', () => {
+  it('warms scripted without touching QVAC', async () => {
+    const engine = await loadAndWarmEngine('scripted');
+    expect(engine.health().engine).toBe('scripted');
+    expect(engine.health().status).toBe('ready');
   });
 });
 

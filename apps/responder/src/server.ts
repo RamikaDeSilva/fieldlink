@@ -1,5 +1,5 @@
 import { serve } from '@hono/node-server';
-import { loadEngine } from '@fieldlink/triage';
+import { loadAndWarmEngine } from '@fieldlink/triage';
 import { createResponderApp } from './create-app.ts';
 
 export async function startResponder(
@@ -8,7 +8,7 @@ export async function startResponder(
 ) {
   const created = createResponderApp({
     ...deps,
-    engine: deps.engine ?? (await loadEngine()),
+    engine: deps.engine ?? (await loadAndWarmEngine()),
   });
   if (created.engine.health().status !== 'ready') {
     await created.engine.warmup();
