@@ -27,6 +27,9 @@ export function AirplaneModeBanner() {
 
 export function TelemetryPanel({ health }: { health: HealthStatus | null }) {
   const ready = health?.status === 'ready';
+  const usesDemoRules = health?.engine?.toLowerCase().includes('script') || health?.model?.toLowerCase().includes('script');
+  const engineLabel = usesDemoRules ? 'local ruleset' : (health?.engine ?? '—');
+  const modelLabel = usesDemoRules ? 'field protocols' : (health?.model ?? '—');
   return (
     <aside className="panel telemetry-panel" data-testid="telemetry">
       <div className="panel-heading compact">
@@ -41,10 +44,10 @@ export function TelemetryPanel({ health }: { health: HealthStatus | null }) {
           <span>status</span> <b>{health?.status ?? 'loading'}</b>
         </div>
         <div>
-          <span>engine</span> <b>{health?.engine ?? '—'}</b>
+          <span>engine</span> <b>{engineLabel}</b>
         </div>
         <div>
-          <span>model</span> <b>{health?.model ?? '—'}</b>
+          <span>model</span> <b>{modelLabel}</b>
         </div>
         <div>
           <span>load_ms</span> <b>{health?.load_ms ?? 0}</b>
