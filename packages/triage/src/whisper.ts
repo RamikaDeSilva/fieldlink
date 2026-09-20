@@ -1,6 +1,8 @@
-import { join } from 'node:path';
-import type { AutomaticSpeechRecognitionPipeline } from '@huggingface/transformers';
+import { fileURLToPath } from 'node:url';
+import { env, pipeline, type AutomaticSpeechRecognitionPipeline } from '@huggingface/transformers';
 import { decodePcmWave } from './pcm-wav.ts';
+
+const defaultVoiceCache = fileURLToPath(new URL('../../../.cache/fieldlink-voice/', import.meta.url));
 
 export type VoiceHealth = {
   status: 'loading' | 'ready' | 'error';
@@ -42,8 +44,7 @@ export class WhisperTinyTranscriber implements VoiceTranscriber {
   private getPipeline(): Promise<AutomaticSpeechRecognitionPipeline> {
     if (!this.pipelinePromise) {
       this.pipelinePromise = (async () => {
-        const { env, pipeline } = await import('@huggingface/transformers');
-        env.cacheDir = process.env.VOICE_MODEL_CACHE ?? join(process.cwd(), '.cache', 'fieldlink-voice');
+        env.cacheDir = process.env.VOICE_MODEL_CACHE ?? defaultVoiceCache;
         if ('allowRemoteModels' in env) {
           env.allowRemoteModels = process.env.VOICE_ALLOW_REMOTE === '1';
         }
