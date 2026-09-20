@@ -101,7 +101,11 @@ export function deterministicChecks(request: PlanRequest): DeterministicResult {
     hazards.push('wildfire_smoke');
   }
 
-  const knownCandidates = [...new Set([...forcedGuideIds, ...candidateGuideIds])];
+  const knownCandidates = [...new Set([
+    ...forcedGuideIds,
+    ...candidateGuideIds,
+    ...householdGuides(request.household),
+  ])];
 
   return {
     forcedGuideIds,

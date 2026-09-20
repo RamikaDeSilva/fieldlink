@@ -99,7 +99,10 @@ export function createCivilianApp(deps: { engine?: CivilianEngine } = {}) {
       };
     } else {
       try {
-        analysis = await engine.analyze(request, { requestId });
+        analysis = await engine.analyze(request, {
+          requestId,
+          candidateGuideIds: deterministic.candidateGuideIds,
+        });
       } catch (error) {
         civilianLog('plan.model.failed', { requestId, ...errorLogFields(error) }, 'error');
         analysis = {
